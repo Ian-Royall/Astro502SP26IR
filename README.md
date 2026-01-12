@@ -1,2 +1,2 @@
 # Astro502SP26IR
-Astro 502 soing 2026 github 
+Astro 502 spring 2026 github 
