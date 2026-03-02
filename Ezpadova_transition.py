@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt # for now run with command ''QT_QPA_PLATFORM=xcb
 import numpy as np
 
 # Single isochrone: use triplet with step=0
-iso = parsec.get_isochrones(
-    logage=(9.0, 9.5, 0.5),      # (start, stop, step=0) = single value
-    MH=(0.0,0.0,0.0),          # same for metallicity
-    photsys_file='gaiaEDR3'
-)
-
+#iso = parsec.get_isochrones(
+#    logage=(9.0, 9.5, 0.5),      # (start, stop, step=0) = single value
+#    MH=(0.0,0.0,0.0),          # same for metallicity
+#    photsys_file='gaiaEDR3'
+#)
+print("Querying PARSEC for a single isochrone...")
 print(iso)                       # Should now print the Astropy Table without encoding error
 print("Columns:", iso.columns)
 
