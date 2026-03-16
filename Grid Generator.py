@@ -4,9 +4,9 @@ from scipy.interpolate import interp1d
 from ezpadova import parsec
 
 # Grid Parameters
-masses_test = np.linspace(0.1, 2.8, 100)  # coarse but covers typical range
+masses_test = np.linspace(0.1, 2.8, 100)  # 100 mass points from 0.1 to 2.8 Msun
 logages_test = np.linspace(7.5, 10.0, 40)  # 40 points, focused on useful ages
-fehs_test    = np.linspace(-1.0, 0.6, 50)   # 50 metallicities to see patterns
+fehs = np.linspace(-1.0, 0.6, 50)   # 50 metallicities to see patterns
 
 def generate_parsec_grid_test(masses, logages, fehs):
     """
@@ -113,8 +113,9 @@ def generate_parsec_grid_test(masses, logages, fehs):
             except Exception as e:
                 fail_count += 1
                 print(f"Query/merge failed for [M/H]={feh:.3f}, logAge={la:.3f}: {e}")
+    return mag_grids, masses, logages, fehs
     
 # Test Grid Generation
-grid_test, m_test, la_test, f_test = generate_parsec_grid_test(masses_test, logages_test, fehs_test)
+grid_test, m_test, la_test, fehs = generate_parsec_grid_test(masses_test, logages_test, fehs)
 #save test grid
-np.savez('parsec_grid_clipped.npz', **grid_test, masses=m_test, logages=la_test, fehs=f_test)
+np.savez('parsec_grid_clipped(2.8).npz', **grid_test, masses=m_test, logages=la_test, fehs=fehs)
