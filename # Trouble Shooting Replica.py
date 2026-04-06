@@ -36,6 +36,7 @@ masses2 = data2['masses']
 logages2 = data2['logages']
 fehs2 = data2['fehs']
 
+# Function DEfinitions
 def brute_force_best_fit(observed, errors, grid, masses, logages, fehs, bands=None):
     """
     Fast initial grid search to find a good starting point.
@@ -69,7 +70,6 @@ def brute_force_best_fit(observed, errors, grid, masses, logages, fehs, bands=No
                     best_params = (masses[i_m], 10**logages[i_la], fehs[i_f])
     
     return best_params, best_chi2
-
 
 def continuous_fit(observed, errors, rough_params, grid, masses, logages, fehs, bands=None, method='Nelder-Mead'):
     """
@@ -126,9 +126,6 @@ def continuous_fit(observed, errors, rough_params, grid, masses, logages, fehs, 
         return initial_guess, chi2_func(initial_guess)
 
     return (best_mass, best_age_yr, best_feh), result.fun
-
-import numpy as np
-from scipy.optimize import minimize
 
 def continuous_fit_with_perturbations(observed, errors, rough_params, grid, masses, logages, fehs, bands=None, n_starts=8, method='Nelder-Mead'):
     if bands is None:
@@ -196,26 +193,55 @@ def continuous_fit_with_perturbations(observed, errors, rough_params, grid, mass
         print("All starts failed or did not converge")
         return tuple(perturbed), chi2_func(perturbed)
 
+def inspect_best_fit_photometry(observed, params, grid, masses, logages, fehs, bands, label=""):
+    mass, age_yr, feh = params
+    model_mags = get_model_mag(mass, age_yr, feh, grid, masses, logages, fehs)
+    
+    print(f"\n=== {label} ===")
+    print(f"Forced parameters: mass={mass:.3f} M⊙, age={age_yr/1e6:.0f} Myr, [Fe/H]={feh:.3f}")
+    print("Band   Obs     Model    Residual    χ² term")
+    print("---------------------------------------------")
+    total_chi2 = 0.0
+    for band in bands:
+        if band in observed and band in model_mags:
+            obs = observed[band]
+            mod = model_mags[band]
+            if np.isnan(mod):
+                print(f"{band:4}   {obs:.3f}     NaN       —")
+                continue
+            res = obs - mod
+            err = errors_sun.get(band, 0.03) if "sun" in label.lower() else errors_young1.get(band, 0.03)
+            chi_term = (res / err)**2
+            total_chi2 += chi_term
+            print(f"{band:4}   {obs:.3f}   {mod:.3f}   {res:+7.3f}    {chi_term:.2f}")
+    print(f"Total χ²: {total_chi2:.2f}\n")
+
 #Measured Values
 
 #Solar values from Casagrande+2010, with typical errors
 observed_sun = {
     'G': 4.65,
-    'BP': 4.83,
-    'RP': 4.24,
-    'J': 3.64,
-    'H': 3.32,
+   # 'BP': 4.83,
+   # 'RP': 4.24,
+   # 'J': 3.64,
+   # 'H': 3.32,
     'K': 3.28,
-    # add W1–W4 if present in grid
+    'W1': 3.25,
+    'W2': 3.24,
+    'W3': 3.23,
+   # 'W4': 3.22
 } 
 errors_sun = {
     'G': 0.01,
-    'BP': 0.02,
-    'RP': 0.02,
-    'J': 0.03,
-    'H': 0.03,
+   # 'BP': 0.02,
+   # 'RP': 0.02,
+    #'J': 0.03,
+    #'H': 0.03,
     'K': 0.03,
-    # add W1–W4 errors
+    'W1': 0.03,
+    'W2': 0.03,
+    'W3': 0.03,
+    #'W4': 0.03
 }
 
 # Young star test values for Pleiades HD 283518 (V987 Tau) from Gaia DR3, with estimated errors
@@ -223,17 +249,25 @@ observed_young1 = {
     'G': 5.85,
     'BP': 6.15,
     'RP': 5.35,
-    'J': 4.95,
-    'H': 4.65,
-    'K': 4.55
+    #'J': 4.95,
+    #'H': 4.65,
+    'K': 4.55,
+    'W1': 4.50,
+    'W2': 4.45,
+    'W3': 4.40,
+    #'W4': 4.35
 }
 errors_young1 = {
     'G': 0.02,
     'BP': 0.03,
     'RP': 0.02,
-    'J': 0.03,
-    'H': 0.03,
-    'K': 0.03
+    #'J': 0.03,
+    #'H': 0.03,
+    'K': 0.03,
+    'W1': 0.03,
+    'W2': 0.03,
+    'W3': 0.03,
+    #'W4': 0.03
 }
 
 # Young star test values for Hyades HD 283518 (V471 Tau) from Gaia DR3, with estimated errors
@@ -241,17 +275,25 @@ observed_young2 = {
     'G':  5.15,
     'BP': 5.45,
     'RP': 4.75,
-    'J':  4.35,
-    'H':  4.05,
-    'K':  3.95
+   # 'J':  4.35,
+   # 'H':  4.05,
+    'K':  3.95,
+    'W1': 3.90,
+    'W2': 3.85,
+    'W3': 3.80,
+   # 'W4': 3.75
 }
 errors_young2 = {
     'G':  0.02,
     'BP': 0.03,
     'RP': 0.02,
-    'J':  0.03,
-    'H':  0.03,
-    'K':  0.03
+  #  'J':  0.03,
+  #  'H':  0.03,
+    'K':  0.03,
+    'W1': 0.03,
+    'W2': 0.03,
+    'W3': 0.03,
+  #  'W4': 0.03
 }
 
 
@@ -313,7 +355,6 @@ print("Slices with partial NaNs:", np.sum((nan_per_slice > 0) & (nan_per_slice <
 print("Slices with no NaNs:", np.sum(nan_per_slice == 0))
 print("shape:", np.shape(data2['G']))  # should be (n_feh, n_logage, n_mass)
 
-
 # ---------------young star tests-------------------
 
 #     Star 1
@@ -355,3 +396,14 @@ best_params_young2, best_chi2_young2 = continuous_fit(
     method='Nelder-Mead'
 )
 
+
+
+#Photometry inspection for the Sun
+print("\n--- Solar Test ---")
+inspect_best_fit_photometry(observed_sun, best_params_per, grid2, masses2, logages2, fehs2, bands=bands_full)
+# Photometry inspection for young star 1
+print("\n--- Young Star 1 (Pleiades HD 283518) ---")
+inspect_best_fit_photometry(observed_young1, best_params_young1, grid2, masses2, logages2, fehs2, bands=bands_full)
+# Photometry inspection for young star 2
+print("\n--- Young Star 2 (Hyades HD 283518) ---")
+inspect_best_fit_photometry(observed_young2, best_params_young2, grid2, masses2, logages2, fehs2, bands=bands_full)
