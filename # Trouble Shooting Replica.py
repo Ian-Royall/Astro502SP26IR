@@ -25,12 +25,19 @@ def get_model_mag(mass, age_yr, feh, grid, masses, logages, fehs):
             method='linear',  # or 'linear' if cubic fails
 
         )
-        mags[band] = interpolator((feh, logage, mass))
+        # Ensure we return a Python float (not a 0-d array) and handle NaNs
+        try:
+            val = interpolator((feh, logage, mass))
+            # Convert possible numpy scalar/array to native float; handle NaN
+            val_arr = np.asarray(val)
+            mags[band] = float(val_arr.item()) if val_arr.size == 1 else float(np.nan)
+        except Exception:
+            mags[band] = np.nan
     return mags
 
 
 # Load saved grid 
-data2 = np.load('parsec_grid_clipped(2.8nc).npz')  # change to 'parsec_grid_full_bands.npz' after generation
+data2 = np.load('/home/iroyall/Documents/Astro 502/Astro502SP26IR/parsec_grid_clipped(2.8nc).npz')  
 grid2 = {k: data2[k] for k in data2 if k not in ['masses', 'logages', 'fehs']}
 masses2 = data2['masses']
 logages2 = data2['logages']
@@ -79,6 +86,13 @@ def continuous_fit(observed, errors, rough_params, grid, masses, logages, fehs, 
     if bands is None:
         bands = list(observed.keys())
 
+    # Bounds: wide but safe (defined before any use)
+    bounds = [
+        (0.08, 3.0),          # mass
+        (7.5, 10.2),          # logage (~10 Myr to 15 Gyr)
+        (-2.0, 0.6)           # [Fe/H]
+    ]
+
     def chi2_func(params):
         mass, logage, feh = params
         mags = get_model_mag(mass, 10**logage, feh, grid, masses, logages, fehs)
@@ -89,26 +103,47 @@ def continuous_fit(observed, errors, rough_params, grid, masses, logages, fehs, 
                 diff = observed[band] - mags[band]
                 chi2 += diff**2 / errors[band]**2
                 n_valid += 1
-        if n_valid < 5:  # require at least 5 good bands
-            return np.inf
-        return chi2 / n_valid  # normalize by valid bands
+        # If too few valid bands, return a large penalty instead of infinity
+        min_valid = 3
+        LARGE = 1e6
+        if n_valid < min_valid:
+            return LARGE
+
+        red_chi2 = chi2 / n_valid
+
+        # Boundary penalty: discourage solutions very near the bounds
+        penalty = 0.0
+        eps_frac = 0.05
+        for p, (low, high) in zip(params, bounds):
+            rng = high - low
+            if rng <= 0:
+                continue
+            frac = (p - low) / rng
+            if frac < eps_frac:
+                penalty += ((eps_frac - frac) / eps_frac) ** 2
+            elif frac > 1.0 - eps_frac:
+                penalty += ((frac - (1.0 - eps_frac)) / eps_frac) ** 2
+
+        penalty_strength = 50.0
+        return red_chi2 + penalty_strength * penalty
 
     # Reasonable starting guess: solar-like
-    initial_guess = np.array(rough_params)  # mass, logage, [Fe/H]
+    # FIX: rough_params = (mass, age_yr, feh) but chi2_func works in logage space
+    rough_mass, rough_age_yr, rough_feh = rough_params
+    initial_guess = np.array([rough_mass, np.log10(rough_age_yr), rough_feh])
+    # Clip initial guess into bounds
+    initial_guess = np.clip(initial_guess, [b[0] for b in bounds], [b[1] for b in bounds])
 
-    # Bounds: wide but safe
-    bounds = [
-        (0.08, 3.0),          # mass
-        (7.5, 10.2),          # logage (~10 Myr to 15 Gyr)
-        (-2.0, 0.6)           # [Fe/H]
-    ]
+    # Use an optimizer that respects bounds by default
+    if method == 'Nelder-Mead':
+        method = 'L-BFGS-B'
 
     result = minimize(
         chi2_func,
         initial_guess,
         bounds=bounds,
         method=method,
-        options={'maxiter': 1000, 'fatol': 1e-6, 'xatol': 1e-6, 'disp': False}
+        options={'maxiter': 1000, 'disp': False}
     )
 
     if result.success:
@@ -141,9 +176,28 @@ def continuous_fit_with_perturbations(observed, errors, rough_params, grid, mass
                 diff = observed[band] - mags[band]
                 chi2 += diff**2 / errors[band]**2
                 n_valid += 1
-        if n_valid < 5:
-            return np.inf
-        return chi2 / n_valid
+        min_valid = 5
+        LARGE = 1e6
+        if n_valid < min_valid:
+            return LARGE
+
+        red_chi2 = chi2 / n_valid
+
+        # Boundary penalty
+        penalty = 0.0
+        eps_frac = 0.05
+        for p, (low, high) in zip(params, base_bounds):
+            rng = high - low
+            if rng <= 0:
+                continue
+            frac = (p - low) / rng
+            if frac < eps_frac:
+                penalty += ((eps_frac - frac) / eps_frac) ** 2
+            elif frac > 1.0 - eps_frac:
+                penalty += ((frac - (1.0 - eps_frac)) / eps_frac) ** 2
+
+        penalty_strength = 50.0
+        return red_chi2 + penalty_strength * penalty
 
     rough_mass, rough_age_yr, rough_feh = rough_params
 
@@ -158,21 +212,22 @@ def continuous_fit_with_perturbations(observed, errors, rough_params, grid, mass
     best_result = None
 
     for start in range(n_starts):
-        # Perturb initial guess
-        perturbation = np.random.uniform(-0.15, 0.15, 3)  # wider for logage/feh
-        perturbed = np.array([rough_mass, np.log10(rough_age_yr), rough_feh]) * (1 + perturbation)
-        
-        # Clip to bounds
+        # Perturb initial guess multiplicatively then clip to base bounds
+        base_guess = np.array([rough_mass, np.log10(rough_age_yr), rough_feh])
+        perturbation = np.random.uniform(-0.15, 0.15, 3)
+        perturbed = base_guess * (1.0 + perturbation)
         perturbed = np.clip(perturbed, [b[0] for b in base_bounds], [b[1] for b in base_bounds])
 
         print(f"Start {start+1}/{n_starts}: initial = {perturbed}")
 
+        # Use a bounds-respecting optimizer by default
+        use_method = method if method != 'Nelder-Mead' else 'L-BFGS-B'
         result = minimize(
             chi2_func,
             perturbed,
             bounds=base_bounds,
-            method=method,
-            options={'maxiter': 1000, 'fatol': 1e-6, 'xatol': 1e-6, 'disp': False}
+            method=use_method,
+            options={'maxiter': 1000, 'disp': False}
         )
 
         if result.fun < best_chi2:
@@ -221,27 +276,27 @@ def inspect_best_fit_photometry(observed, params, grid, masses, logages, fehs, b
 #Solar values from Casagrande+2010, with typical errors
 observed_sun = {
     'G': 4.65,
-   # 'BP': 4.83,
-   # 'RP': 4.24,
-   # 'J': 3.64,
-   # 'H': 3.32,
+   'BP': 4.83,
+   'RP': 4.24,
+   'J': 3.64,
+   'H': 3.32,
     'K': 3.28,
     'W1': 3.25,
     'W2': 3.24,
     'W3': 3.23,
-   # 'W4': 3.22
+     'W4': 3.22
 } 
 errors_sun = {
     'G': 0.01,
-   # 'BP': 0.02,
-   # 'RP': 0.02,
-    #'J': 0.03,
-    #'H': 0.03,
+    'BP': (0.02**2 + 0.01**2)**0.5,  # combine Gaia and typical error
+    'RP': (0.02**2 + 0.01**2)**0.5,
+    'J': 0.03,
+    'H': 0.03,
     'K': 0.03,
     'W1': 0.03,
     'W2': 0.03,
     'W3': 0.03,
-    #'W4': 0.03
+    'W4': 0.03
 }
 
 # Young star test values for Pleiades HD 283518 (V987 Tau) from Gaia DR3, with estimated errors
@@ -249,25 +304,25 @@ observed_young1 = {
     'G': 5.85,
     'BP': 6.15,
     'RP': 5.35,
-    #'J': 4.95,
-    #'H': 4.65,
+    'J': 4.95,
+    'H': 4.65,
     'K': 4.55,
     'W1': 4.50,
     'W2': 4.45,
     'W3': 4.40,
-    #'W4': 4.35
+    'W4': 4.35
 }
 errors_young1 = {
     'G': 0.02,
-    'BP': 0.03,
-    'RP': 0.02,
-    #'J': 0.03,
-    #'H': 0.03,
+    'BP': (0.03**2 + 0.02**2)**0.5,  # combine Gaia and typical error
+    'RP': (0.02**2 + 0.01**2)**0.5,
+    'J': 0.03,
+    'H': 0.03,
     'K': 0.03,
     'W1': 0.03,
     'W2': 0.03,
     'W3': 0.03,
-    #'W4': 0.03
+    'W4': 0.03
 }
 
 # Young star test values for Hyades HD 283518 (V471 Tau) from Gaia DR3, with estimated errors
@@ -275,25 +330,25 @@ observed_young2 = {
     'G':  5.15,
     'BP': 5.45,
     'RP': 4.75,
-   # 'J':  4.35,
-   # 'H':  4.05,
+    'J':  4.35,
+    'H':  4.05,
     'K':  3.95,
     'W1': 3.90,
     'W2': 3.85,
     'W3': 3.80,
-   # 'W4': 3.75
+    'W4': 3.75
 }
 errors_young2 = {
     'G':  0.02,
-    'BP': 0.03,
-    'RP': 0.02,
-  #  'J':  0.03,
-  #  'H':  0.03,
+    'BP': (0.03**2 + 0.02**2)**0.5,  # combine Gaia and typical error
+    'RP': (0.02**2 + 0.01**2)**0.5,
+    'J':  0.03,
+    'H':  0.03,
     'K':  0.03,
     'W1': 0.03,
     'W2': 0.03,
     'W3': 0.03,
-  #  'W4': 0.03
+    'W4': 0.03
 }
 
 
@@ -310,9 +365,7 @@ bands = [b for b in observed_sun if b in grid2]
 rough_params, rough_chi2 = brute_force_best_fit(
     observed_sun, errors_sun, grid2, masses2, logages2, fehs2, bands=bands
 )
-
 print("Rough fit Grid 2:", rough_params, rough_chi2)
-
 #contiunous fit starting from rough grid point
 best_params, best_chi2 = continuous_fit(
     observed_sun,
@@ -326,24 +379,9 @@ best_params, best_chi2 = continuous_fit(
     method='Nelder-Mead'  # robust to noise/NaNs
 )
 
-# Run perturbation tests to check for local minima
-best_params_per, best_chi2_per = continuous_fit_with_perturbations(
-    observed_sun,
-    errors_sun,
-    rough_params,  # from your rough fit
-    grid2,
-    masses2,
-    logages2,
-    fehs2,
-    bands=bands_full,
-    n_starts=8  # try 8–10 starts
-)
 
-print("Best fit with perturbations:", best_params_per, best_chi2_per)
-
-
-#--------------analytic checks-------------------
-
+#--------------analytic Nan checks-------------------
+'''
 band = 'J'  # or 'J' to check NIR
 
 # Check NaN distribution in grid2 for the chosen band
@@ -354,6 +392,7 @@ print("Slices with full NaNs:", np.sum(nan_per_slice == len(masses2)))
 print("Slices with partial NaNs:", np.sum((nan_per_slice > 0) & (nan_per_slice < len(masses2))))
 print("Slices with no NaNs:", np.sum(nan_per_slice == 0))
 print("shape:", np.shape(data2['G']))  # should be (n_feh, n_logage, n_mass)
+'''
 
 # ---------------young star tests-------------------
 
@@ -376,7 +415,6 @@ best_params_young1, best_chi2_young1 = continuous_fit(
     method='Nelder-Mead'
 )
 
-
 #     Star 2
 # Rough fit for young star Hyades HD 283518
 rough_params_young2, rough_chi2_young2 = brute_force_best_fit(
@@ -387,7 +425,7 @@ print("Rough fit Young Star 2:", rough_params_young2, rough_chi2_young2)
 best_params_young2, best_chi2_young2 = continuous_fit(
     observed_young2,
     errors_young2,
-    rough_params,        
+    rough_params_young2,        
     grid2,
     masses2,
     logages2,
@@ -400,10 +438,13 @@ best_params_young2, best_chi2_young2 = continuous_fit(
 
 #Photometry inspection for the Sun
 print("\n--- Solar Test ---")
-inspect_best_fit_photometry(observed_sun, best_params_per, grid2, masses2, logages2, fehs2, bands=bands_full)
+inspect_best_fit_photometry(observed_sun, best_params, grid2, masses2, logages2, fehs2, bands=bands_full)
 # Photometry inspection for young star 1
 print("\n--- Young Star 1 (Pleiades HD 283518) ---")
 inspect_best_fit_photometry(observed_young1, best_params_young1, grid2, masses2, logages2, fehs2, bands=bands_full)
 # Photometry inspection for young star 2
 print("\n--- Young Star 2 (Hyades HD 283518) ---")
 inspect_best_fit_photometry(observed_young2, best_params_young2, grid2, masses2, logages2, fehs2, bands=bands_full)
+
+
+inspect_best_fit_photometry(observed_sun, (1.0, 4.6e9, 0.0), grid2, masses2, logages2, fehs2, bands=bands_full, label="Solar Model Check")
