@@ -1,6 +1,10 @@
+import os
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from ezpadova import parsec
+
+_ANALYSIS = os.path.dirname(os.path.abspath(__file__))
+_BASE     = os.path.dirname(_ANALYSIS)
 
 # ──────────────────────────────────────────
 # Final get_model_mag using 3D interpolation
@@ -26,7 +30,7 @@ def get_model_mag(mass, age_yr, feh, grid, masses, logages, fehs):
 
 
 # Load saved grid (after generation)
-data = np.load('parsec_grid_with_NIR.npz')
+data = np.load(os.path.join(_BASE, 'Grids', 'Tera Grid.npz'))
 grid = {k: data[k] for k in data if k not in ['masses', 'logages', 'fehs']}
 masses = data['masses']
 logages = data['logages']

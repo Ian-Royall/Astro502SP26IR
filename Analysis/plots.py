@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -5,7 +6,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-RESULTS_CSV = '/home/iroyall/Documents/Astro 502/Astro502SP26IR/stellar_ages_results.csv'
+_ANALYSIS   = os.path.dirname(os.path.abspath(__file__))
+_BASE       = os.path.dirname(_ANALYSIS)
+_OUTPUTS    = os.path.join(_BASE, 'Outputs')
+
+RESULTS_CSV = os.path.join(_OUTPUTS, 'stellar_ages_results.csv')
 
 df  = pd.read_csv(RESULTS_CSV)
 rel = df[df['reliable'] == True].copy()
@@ -40,13 +45,13 @@ ax.set_xticklabels([f'{b:.2f}' if i % 4 == 0 else '' for i, b in enumerate(bins[
 ax.tick_params(axis='x', labelsize=8)
 
 plt.tight_layout()
-plt.savefig('/home/iroyall/Documents/Astro 502/Astro502SP26IR/age_distribution_tera.png', dpi=150)
+plt.savefig(os.path.join(_OUTPUTS, 'age_distribution_tera.png'), dpi=150)
 plt.show()
 print("Saved: age_distribution_tera.png")
 
 
 # ── Fitted Age vs Catalog Age Scatter ─────────────────────────────────────────
-target  = pd.read_csv('/home/iroyall/Documents/Astro 502/Astro502SP26IR/ASTR502_Mega_Target_List.csv')
+target  = pd.read_csv(os.path.join(_ANALYSIS, 'ASTR502_Mega_Target_List.csv'))
 target  = target.drop_duplicates('hostname', keep='first')
 
 comp = df.merge(target[['hostname', 'st_age', 'st_ageerr1', 'st_ageerr2']],
@@ -114,13 +119,13 @@ ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
 
 plt.tight_layout()
-plt.savefig('/home/iroyall/Documents/Astro 502/Astro502SP26IR/age_comparison_tera.png', dpi=150)
+plt.savefig(os.path.join(_OUTPUTS, 'age_comparison_tera.png'), dpi=150)
 plt.show()
 print("Saved: age_comparison_tera.png")
 
 
 # ── My Fit Age vs James's Fit Age ─────────────────────────────────────────────
-james = pd.read_csv('/home/iroyall/Documents/Astro 502/Astro502SP26IR/James_interpolate_20260414_161013_candidate_fits.csv')
+james = pd.read_csv(os.path.join(_ANALYSIS, 'James_interpolate_20260414_161013_candidate_fits.csv'))
 james['age_gyr_james'] = james['age_yr'] / 1e9
 
 vs_james = df.merge(james[['hostname', 'age_gyr_james', 'chi2_reduced']], on='hostname', how='inner')
@@ -153,6 +158,6 @@ ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
 
 plt.tight_layout()
-plt.savefig('/home/iroyall/Documents/Astro 502/Astro502SP26IR/age_vs_james.png', dpi=150)
+plt.savefig(os.path.join(_OUTPUTS, 'age_vs_james.png'), dpi=150)
 plt.show()
 print("Saved: age_vs_james.png")

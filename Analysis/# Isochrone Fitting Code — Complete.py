@@ -1,8 +1,12 @@
 # Isochrone Fitting Code — Complete
+import os
 import numpy as np
 import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize
+
+_ANALYSIS = os.path.dirname(os.path.abspath(__file__))
+_BASE     = os.path.dirname(_ANALYSIS)
 
 # ──────────────────────────────────────────
 # Build interpolators ONCE from the 3D grid
@@ -45,7 +49,7 @@ def get_model_mag(mass, age_yr, feh, interpolators):
 # ──────────────────────────────────────────
 # Load saved grid
 # ──────────────────────────────────────────
-data2 = np.load('/home/iroyall/Documents/Astro 502/Astro502SP26IR/Tera Grid.npz')
+data2 = np.load(os.path.join(_BASE, 'Grids', 'Tera Grid.npz'))
 
 # Separate physical grids from magnitude grids
 _reserved = ['masses', 'logages', 'fehs', 'Teff', 'logg']
@@ -646,9 +650,9 @@ for band in ['G', 'J']:
 # CSV BATCH FIT — all targets
 # ══════════════════════════════════════════
 
-PHOT_CSV    = '/home/iroyall/Documents/Astro 502/Astro502SP26IR/ASTR502_Master_Photometry_List.csv'
-TARGET_CSV  = '/home/iroyall/Documents/Astro 502/Astro502SP26IR/ASTR502_Mega_Target_List.csv'
-RESULTS_CSV = '/home/iroyall/Documents/Astro 502/Astro502SP26IR/stellar_ages_results.csv'
+PHOT_CSV    = os.path.join(_ANALYSIS, 'ASTR502_Master_Photometry_List.csv')
+TARGET_CSV  = os.path.join(_ANALYSIS, 'ASTR502_Mega_Target_List.csv')
+RESULTS_CSV = os.path.join(_BASE, 'Outputs', 'stellar_ages_results.csv')
 
 # band → (apparent-mag column, error column, minimum error floor)
 BAND_COLS = {

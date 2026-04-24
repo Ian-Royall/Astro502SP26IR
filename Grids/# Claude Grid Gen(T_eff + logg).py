@@ -16,9 +16,9 @@ _la_young    = np.linspace(7.5, 9.0, 25)   # 0.03–1 Gyr,  ~0.063 dex spacing
 _la_old      = np.linspace(9.0, 10.0, 101) # 1–10 Gyr,   ~0.010 dex spacing
 logages_test = np.concatenate([_la_young, _la_old[1:]])  # 124 nodes total
 
-_DIR            = '/home/iroyall/Documents/Astro 502/Astro502SP26IR'
-CHECKPOINT_FILE = f'{_DIR}/parsec_grid_checkpoint_v2.npz'
-OUTPUT_FILE     = f'{_DIR}/Tera Grid.npz'
+_DIR            = os.path.dirname(os.path.abspath(__file__))
+CHECKPOINT_FILE = os.path.join(_DIR, 'parsec_grid_checkpoint_v2.npz')
+OUTPUT_FILE     = os.path.join(_DIR, 'Tera Grid.npz')
 
 # ── Retry config ──────────────────────────────────────────────────────────────
 # Delays (seconds) between retries on connection loss; last value repeats.
