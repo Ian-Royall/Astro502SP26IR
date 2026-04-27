@@ -504,7 +504,7 @@ def _bands_for(obs):
 
 # ── Spectroscopic priors — comment out either line to disable that prior globally ─
 ACTIVE_PRIORS = [
-     'teff',
+     #'teff',
    #  'logg',
 ]
 
